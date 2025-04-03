@@ -1,10 +1,7 @@
 <center>
-
-# Stock-Centaur
-Web tool for evaluating stocks and portfolios leveraging AI and ML
-
+<h1>Stock-Centaur</h1>
+<p>Web tool for evaluating stocks and portfolios leveraging AI and ML</p>
 <img src="stock_centaur_logo.jpeg" width="300" height="300">
-
 </center>
 
 ##### 
