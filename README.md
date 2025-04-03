@@ -1,7 +1,11 @@
+<center>
+
 # Stock-Centaur
 Web tool for evaluating stocks and portfolios leveraging AI and ML
 
 <img src="stock_centaur_logo.jpeg" width="300" height="300">
+
+</center>
 
 ##### 
 # Road Map
