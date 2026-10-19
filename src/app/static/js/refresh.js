@@ -48,7 +48,7 @@
   }
 
   btn.addEventListener("click", async () => {
-    if (!confirm("Download fresh prices for every ticker and rebuild the rankings? This takes around 15 minutes, longer if Yahoo rate-limits the download.")) return;
+    if (!confirm("Download fresh prices for every ticker, rebuild the rankings and retrain the price model? This takes around 15 minutes, longer if Yahoo rate-limits the download.")) return;
     flag("running");
     const res = await fetch("/api/refresh", { method: "POST" });
     show(await res.json());

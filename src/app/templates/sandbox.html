@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Portfolio Sandbox{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Portfolio Sandbox</h1>
+    <p class="muted">Build a hypothetical portfolio and see where a tree-based model projects it 30 days from now.
+      <button class="link-btn" type="button" data-open="about-model">How it works</button></p>
+  </div>
+  {% if meta %}<div class="as-of">Prices as of <strong>{{ meta.as_of }}</strong> · projecting to <strong>{{ meta.target_date }}</strong></div>{% endif %}
+</div>
+
+<div class="notice" role="note">
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>
+  <p><strong>Not investment advice.</strong> Projections are statistical estimates from past price trends only, for
+    exploring ideas. Real outcomes can fall well outside the ranges shown.</p>
+</div>
+
+<dialog class="modal" id="about-model" aria-labelledby="about-model-title">
+  <div class="modal-head">
+    <h2 id="about-model-title">How the projections work</h2>
+    <button class="icon-btn" type="button" data-close aria-label="Close">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="modal-body prose">
+    <h3>The model</h3>
+    <p>A gradient-boosted tree model predicts how much each stock will beat or trail the typical stock over the next
+      21 trading days (about 30 calendar days); the market's average return is then added back. Its inputs are the
+      stock's price slopes over the last 1 year, 6 months, 3 months, 1 month, 2 weeks and 3 days, how volatile it was
+      over the last 1 and 3 months, its worst drop over the past year and how far it sits below its 52-week high.
+      Two more tree models predict the 10th and 90th percentile of the return, and that range is widened just enough
+      to contain 80% of outcomes on held-out data.</p>
+    <h3>The portfolio range</h3>
+    <p>The sandbox runs a Monte Carlo simulation: it draws 10,000 possible 30-day outcomes for every stock from its
+      predicted return and range, correlated using how the stocks moved together over the past year, then adds up
+      the portfolio's value in each one. The projected value is the median outcome.</p>
+    {% if meta %}{% set v = meta.model.validation %}
+    <h3>How well it did on held-out data</h3>
+    <p>Trained on earlier dates, then tested on {{ "{:,}".format(v.rows) }} stock-months from {{ v.start }} onward that it never saw:</p>
+    <ul>
+      <li>Average error {{ "%.2f" | format(v.mae_pct) }}% of price, vs {{ "%.2f" | format(v.baseline_mae_pct) }}% for assuming no change.</li>
+      <li>Got the direction right {{ "%.1f" | format(v.direction_accuracy * 100) }}% of the time, vs
+        {{ "%.1f" | format(v.baseline_direction_accuracy * 100) }}% for always guessing the more common direction.</li>
+      <li>The 10th–90th percentile range contained the actual outcome {{ "%.0f" | format(v.range_coverage * 100) }}% of the time (80% is the target).</li>
+    </ul>
+    <p>Short-term returns are mostly noise, so expect modest numbers here. Treat a projection as one rough input,
+      not a forecast to act on.</p>
+    {% endif %}
+    <p class="muted">Nothing here is investment advice. <a href="{{ url_for('methodology') }}">Full methodology →</a></p>
+  </div>
+</dialog>
+
+{% if not meta %}
+<div class="card empty">
+  <h2>No predictions yet</h2>
+  <p>Train the price model and generate predictions from the repo root, then reload this page:</p>
+  <pre><code>python src/modeling/03_train_price_model.py
+python src/modeling/04_predict_prices.py</code></pre>
+</div>
+{% else %}
+<section class="stats">
+  <div class="stat"><div class="stat-label">Invested today</div><div class="stat-value" id="stat-invested">–</div></div>
+  <div class="stat"><div class="stat-label">Projected in 30 days</div><div class="stat-value" id="stat-projected">–</div></div>
+  <div class="stat"><div class="stat-label">Likely range (10th–90th)</div><div class="stat-value stat-range" id="stat-range">–</div></div>
+  <div class="stat"><div class="stat-label">Chance of a loss</div><div class="stat-value" id="stat-loss">–</div></div>
+</section>
+
+<div class="sandbox-grid">
+  <section class="card">
+    <div class="toolbar">
+      <div class="combo" id="combo">
+        <label class="search">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input id="add-search" type="search" placeholder="Add a ticker…" autocomplete="off"
+                 role="combobox" aria-expanded="false" aria-controls="add-list" aria-autocomplete="list">
+        </label>
+        <ul class="combo-list" id="add-list" role="listbox" hidden></ul>
+      </div>
+      <button class="btn" id="autopick-btn" type="button" aria-expanded="false" aria-controls="autopick">
+        <svg viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 11l-5.5 2.5L12 19l-2.5-5.5L4 11l5.5-2.5z"/></svg>Auto-pick
+      </button>
+      <button class="btn btn-quiet" id="clear-btn" type="button">Clear</button>
+    </div>
+    <form class="weights autopick" id="autopick" hidden>
+      <fieldset class="goal">
+        <legend>Pick stocks for</legend>
+        <label class="goal-opt">
+          <input type="radio" name="objective" value="return" checked>
+          <span><strong>Highest projected return</strong><small class="muted">The stocks with the biggest 30-day forecasts. Wider range of outcomes.</small></span>
+        </label>
+        <label class="goal-opt">
+          <input type="radio" name="objective" value="safety">
+          <span><strong>Lowest chance of loss</strong><small class="muted">Stocks unlikely to fall that don't tend to fall together. Smaller gains.</small></span>
+        </label>
+      </fieldset>
+      <div class="autopick-fields">
+        <label class="field">Budget
+          <span class="money"><span>$</span><input id="ap-budget" type="number" min="1" step="any" inputmode="decimal" value="10000"></span>
+        </label>
+        <label class="field">Stocks
+          <select id="ap-count"><option>3</option><option selected>5</option><option>8</option><option>10</option><option>15</option><option>20</option></select>
+        </label>
+        <label class="field">Min price
+          <select id="ap-min-price"><option value="1">$1+</option><option value="5" selected>$5+</option><option value="20">$20+</option><option value="100">$100+</option></select>
+        </label>
+        <button class="btn btn-primary" id="ap-go" type="submit">Build portfolio</button>
+      </div>
+      <p class="muted autopick-msg" id="ap-msg" role="status">Replaces the holdings below. Budget is split evenly.</p>
+    </form>
+    <div class="table-wrap">
+      <table class="stock-table holdings-table">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Amount</th>
+            <th class="num hide-sm">Price</th>
+            <th class="num">30-day forecast</th>
+            <th class="num hide-md">Range (10th–90th)</th>
+            <th class="num hide-sm">Projected value</th>
+            <th><span class="sr-only">Remove</span></th>
+          </tr>
+        </thead>
+        <tbody id="holding-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card chart-card">
+    <div class="chart-head">
+      <h2>Simulated value in 30 days</h2>
+      <span class="muted" id="chart-note"></span>
+    </div>
+    <div class="chart" id="chart"><p class="muted chart-empty">Add stocks to see the range of outcomes.</p></div>
+    <div class="chart-key muted" id="chart-key" hidden>
+      <span><i class="key-band"></i>10th–90th percentile</span>
+      <span><i class="key-line"></i>Invested today</span>
+    </div>
+  </section>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if meta %}<script src="{{ url_for('static', filename='js/sandbox.js') }}"></script>{% endif %}
+{% endblock %}

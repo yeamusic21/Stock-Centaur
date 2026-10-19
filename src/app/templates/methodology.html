@@ -35,9 +35,16 @@
   <p>The trend score is calculated from slopes only. There's no model behind it, and it describes past momentum
     rather than predicting future prices. A score of 90 means a stock has been trending better than about 90% of
     stocks, not that it will keep doing so.</p>
-  <p>The upcoming Portfolio Sandbox will use a separate tree-based model to forecast each stock's price 30 days out.
-    It reuses the same slope calculations as inputs, over more windows (1 year, 6 months, 3 months, 1 month, 2 weeks
-    and 3 days). Once it's built, its forecast can appear next to the trend score.</p>
+  <p>The <a href="{{ url_for('sandbox') }}">Portfolio Sandbox</a> uses a separate gradient-boosted tree model to
+    forecast each stock's price 21 trading days (about 30 calendar days) out. It reuses the same slope calculations
+    as inputs, over more windows (1 year, 6 months, 3 months, 1 month, 2 weeks and 3 days), adds 1- and 3-month
+    volatility, 1-year max drawdown and distance from the 52-week high, and is trained on thousands of past dates
+    per stock to predict each stock's return relative to the median stock. Two quantile models, calibrated on
+    held-out dates, give each forecast a 10th–90th percentile range, and the
+    sandbox combines those ranges in a Monte Carlo simulation to project a whole portfolio.</p>
+  <p>The model is checked on recent dates it never trained on. Short-term returns are mostly noise, so it only
+    narrowly beats simply assuming no change; the sandbox's <strong>How it works</strong> panel shows the latest
+    numbers.</p>
 
   <h2>Data</h2>
   <p>Prices come from Yahoo Finance via <code>yfinance</code> and are refreshed by re-running the modeling

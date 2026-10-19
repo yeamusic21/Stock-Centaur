@@ -50,9 +50,9 @@
     <p>The trend score describes past momentum. It is not a prediction of where the price goes next. A score of 90
       means the stock has been trending better than about 90% of stocks, not that it will keep doing so.</p>
     <h3>How it relates to the prediction model</h3>
-    <p>The upcoming Portfolio Sandbox will use a tree-based model to forecast each stock's price 30 days out. That model
-      uses the same slope calculations as inputs, over more windows (1 year, 6 months, 3 months, 1 month, 2 weeks and
-      3 days), but it's a separate system. Once it's built, its forecast can appear next to the trend score.</p>
+    <p>The <a href="{{ url_for('sandbox') }}">Portfolio Sandbox</a> uses a tree-based model to forecast each stock's
+      price 30 days out. That model uses the same slope calculations as inputs, over more windows (1 year, 6 months,
+      3 months, 1 month, 2 weeks and 3 days), but it's a separate system.</p>
     <p class="muted">Nothing here is investment advice. <a href="{{ url_for('methodology') }}">Full methodology →</a></p>
   </div>
 </dialog>

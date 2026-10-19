@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 
 import refresh
+import sandbox as sandbox_sim
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TREND_TABLE_PATH = REPO_ROOT / "data" / "trend_table.json"
@@ -52,13 +53,39 @@ def api_refresh_start():
 
 @app.route("/sandbox")
 def sandbox():
-    return render_template(
-        "coming_soon.html",
-        active="sandbox",
-        title="Portfolio Sandbox",
-        blurb="Pick stocks, build a hypothetical portfolio, and simulate projected earnings with a "
-              "tree-based model that forecasts each stock's price 30 days out from its trend features.",
-    )
+    data = sandbox_sim.load_predictions()
+    meta = None if data is None else {k: data[k] for k in ["as_of", "target_date", "model"]}
+    return render_template("sandbox.html", active="sandbox", meta=meta)
+
+
+@app.route("/api/predictions")
+def api_predictions():
+    data = sandbox_sim.load_predictions()
+    if data is None:
+        return jsonify({"error": "No predictions yet. Run the modeling pipeline first."}), 404
+    return jsonify(data)
+
+
+@app.route("/api/simulate", methods=["POST"])
+def api_simulate():
+    if sandbox_sim.load_predictions() is None:
+        return jsonify({"error": "No predictions yet. Run the modeling pipeline first."}), 404
+    try:
+        return jsonify(sandbox_sim.simulate((request.get_json(silent=True) or {}).get("holdings", [])))
+    except (ValueError, TypeError, KeyError) as err:
+        return jsonify({"error": str(err)}), 400
+
+
+@app.route("/api/autopick", methods=["POST"])
+def api_autopick():
+    if sandbox_sim.load_predictions() is None:
+        return jsonify({"error": "No predictions yet. Run the modeling pipeline first."}), 404
+    body = request.get_json(silent=True) or {}
+    try:
+        return jsonify(sandbox_sim.autopick(body.get("objective"), body.get("budget", 0), body.get("count", 0),
+                                            body.get("min_price", sandbox_sim.MIN_PICK_PRICE)))
+    except (ValueError, TypeError) as err:
+        return jsonify({"error": str(err)}), 400
 
 
 @app.route("/insights")

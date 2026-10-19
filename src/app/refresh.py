@@ -12,6 +12,8 @@ MODELING_DIR = REPO_ROOT / "src" / "modeling"
 STEPS = [
     ("Downloading prices", [MODELING_DIR / "data_gathering" / "01_pull_stock_data.py", "--force"]),
     ("Building rankings", [MODELING_DIR / "02_build_trend_table.py"]),
+    ("Training price model", [MODELING_DIR / "03_train_price_model.py"]),
+    ("Predicting prices", [MODELING_DIR / "04_predict_prices.py"]),
 ]
 PROGRESS_RE = re.compile(r"Pulling tickers \d+-(\d+) of (\d+)")
 
