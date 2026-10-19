@@ -37,10 +37,9 @@
     stocks, not that it will keep doing so.</p>
   <p>The <a href="{{ url_for('sandbox') }}">Portfolio Sandbox</a> uses a separate gradient-boosted tree model to
     forecast each stock's price 21 trading days (about 30 calendar days) out. It reuses the same slope calculations
-    as inputs, over more windows (1 year, 6 months, 3 months, 1 month, 2 weeks and 3 days), adds 1- and 3-month
-    volatility, 1-year max drawdown and distance from the 52-week high, and is trained on thousands of past dates
-    per stock to predict each stock's return relative to the median stock. Two quantile models, calibrated on
-    held-out dates, give each forecast a 10th–90th percentile range, and the
+    as inputs, over more windows (1 year, 6 months, 3 months, 1 month, 2 weeks and 3 days), adds volatility and
+    drawdown measures, and is trained on hundreds of past dates per stock to predict how each stock does relative
+    to the market. Two quantile models give each forecast a 10th–90th percentile range, and the
     sandbox combines those ranges in a Monte Carlo simulation to project a whole portfolio.</p>
   <p>The model is checked on recent dates it never trained on. Short-term returns are mostly noise, so it only
     narrowly beats simply assuming no change; the sandbox's <strong>How it works</strong> panel shows the latest
