@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Trend Rankings{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Trend Rankings</h1>
+    <p class="muted">Stocks ranked by a blended trend score from their 5-year, 1-year and 1-month price slopes.
+      <button class="link-btn" type="button" data-open="learn-more">Learn more</button></p>
+  </div>
+  {% if meta %}
+  <div class="as-of">Data as of <strong>{{ meta.as_of }}</strong></div>
+  {% endif %}
+</div>
+
+<dialog class="modal" id="learn-more" aria-labelledby="learn-more-title">
+  <div class="modal-head">
+    <h2 id="learn-more-title">What is the trend score?</h2>
+    <button class="icon-btn" type="button" data-close aria-label="Close">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="modal-body prose">
+    <p>The trend score (0–100) measures how strongly a stock's price has been rising compared with every other
+      stock. It's calculated from the stock's own price history only. There's no model or forecast behind it.</p>
+    <h3>How it's calculated</h3>
+    <ol>
+      <li><strong>Slopes.</strong> A straight line is fit to the log of the daily price over the last 5 years,
+        1 year and 1 month. Each slope is the % change along that line.</li>
+      <li><strong>Percentiles.</strong> Each slope is ranked against all other stocks, so a 1-year percentile of 80
+        means the stock's 1-year slope beats 80% of stocks.</li>
+      <li><strong>Blend.</strong> The trend score is the weighted average of the three percentiles:
+        <span id="learn-more-weights">{% if meta %}5-year {{ (meta.weights['5y'] * 100) | round | int }}%,
+        1-year {{ (meta.weights['1y'] * 100) | round | int }}%, 1-month {{ (meta.weights['1m'] * 100) | round | int }}%{% endif %}</span>.
+        You can change these with <strong>Tune weights</strong>.</li>
+    </ol>
+    <h3>What it isn't</h3>
+    <p>The trend score describes past momentum. It is not a prediction of where the price goes next. A score of 90
+      means the stock has been trending better than about 90% of stocks, not that it will keep doing so.</p>
+    <h3>How it relates to the prediction model</h3>
+    <p>The upcoming Portfolio Sandbox will use a tree-based model to forecast each stock's price 30 days out. That model
+      uses the same slope calculations as inputs, over more windows (1 year, 6 months, 3 months, 1 month, 2 weeks and
+      3 days), but it's a separate system. Once it's built, its forecast can appear next to the trend score.</p>
+    <p class="muted">Nothing here is investment advice. <a href="{{ url_for('methodology') }}">Full methodology →</a></p>
+  </div>
+</dialog>
+
+{% if not meta %}
+<div class="card empty">
+  <h2>No data yet</h2>
+  <p>Build the dataset from the repo root, then refresh this page:</p>
+  <pre><code>python src/modeling/data_gathering/01_pull_stock_data.py
+python src/modeling/02_build_trend_table.py</code></pre>
+</div>
+{% else %}
+<section class="stats" id="stats">
+  <div class="stat"><div class="stat-label">Stocks ranked</div><div class="stat-value" id="stat-count">{{ "{:,}".format(meta.count) }}</div></div>
+  <div class="stat"><div class="stat-label">Top trend</div><div class="stat-value" id="stat-top">–</div></div>
+  <div class="stat"><div class="stat-label">Median 1Y return</div><div class="stat-value" id="stat-median">–</div></div>
+  <div class="stat"><div class="stat-label">Up today</div><div class="stat-value" id="stat-up">–</div></div>
+</section>
+
+<section class="card">
+  <div class="toolbar">
+    <label class="search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="search" type="search" placeholder="Search ticker…" autocomplete="off">
+    </label>
+    <label class="field">Min price
+      <select id="min-price">
+        <option value="0">Any</option>
+        <option value="1">$1+</option>
+        <option value="5" selected>$5+</option>
+        <option value="20">$20+</option>
+        <option value="100">$100+</option>
+      </select>
+    </label>
+    <label class="field">Rows
+      <select id="page-size">
+        <option>25</option><option selected>50</option><option>100</option>
+      </select>
+    </label>
+    <button class="btn" id="weights-btn" type="button" aria-expanded="false">Tune weights</button>
+  </div>
+
+  <div class="weights" id="weights" hidden>
+    <p class="muted">Adjust how much each slope contributes to the trend score. Weights are normalized to sum to 100%.</p>
+    <div class="weight-grid">
+      {% for k, label in [("5y", "5-year"), ("1y", "1-year"), ("1m", "1-month")] %}
+      <label class="weight">
+        <span>{{ label }} <output id="w-{{ k }}-out"></output></span>
+        <input type="range" min="0" max="100" step="5" id="w-{{ k }}" data-key="{{ k }}" value="{{ (meta.weights[k] * 100) | round | int }}">
+      </label>
+      {% endfor %}
+    </div>
+    <button class="btn btn-quiet" id="weights-reset" type="button">Reset to default</button>
+  </div>
+
+  <div class="table-wrap">
+    <table class="stock-table" id="stock-table">
+      <thead>
+        <tr>
+          <th data-sort="rank" class="num">#</th>
+          <th data-sort="ticker">Ticker</th>
+          <th data-sort="trend">Trend <span class="tip" tabindex="0" role="button" aria-label="What is the trend score?" data-open="learn-more"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg><span class="tip-body" role="tooltip"><strong>Trend score (0–100)</strong>A weighted blend of how this stock's price slopes rank against every other stock: <span id="trend-tip-weights"></span>. A score of 90 means it's trending better than about 90% of stocks.<span class="tip-link">Learn more →</span></span></span></th>
+          <th data-sort="price" class="num">Price</th>
+          <th data-sort="change_1d" class="num">1D</th>
+          <th data-sort="return_1y" class="num hide-sm">1Y return</th>
+          <th data-sort="slope_5y" class="num hide-md">5Y slope <span class="tip tip-end" tabindex="0" aria-label="What is this?"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg><span class="tip-body" role="tooltip"><strong>5-year slope</strong>% change along a straight-line fit to the log price over the last year. Less sensitive to one-day spikes than a simple return.</span></span></th>
+          <th data-sort="slope_1y" class="num hide-md">1Y slope <span class="tip tip-end" tabindex="0" aria-label="What is this?"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg><span class="tip-body" role="tooltip"><strong>1-year slope</strong>% change along a straight-line fit to the log price over the last year. Less sensitive to one-day spikes than a simple return.</span></span></th>
+          <th data-sort="slope_1m" class="num hide-md">1M slope <span class="tip tip-end" tabindex="0" aria-label="What is this?"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg><span class="tip-body" role="tooltip"><strong>1-month slope</strong>% change along a straight-line fit to the log price over the last month. Less sensitive to one-day spikes than a simple return.</span></span></th>
+          <th class="hide-sm">1Y chart</th>
+        </tr>
+      </thead>
+      <tbody id="stock-rows">
+        <tr><td colspan="10" class="loading">Loading stocks…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pager">
+    <span class="muted" id="pager-info"></span>
+    <div class="pager-btns">
+      <button class="btn" id="prev" type="button">Previous</button>
+      <button class="btn" id="next" type="button">Next</button>
+    </div>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if meta %}<script src="{{ url_for('static', filename='js/rankings.js') }}"></script>{% endif %}
+{% endblock %}

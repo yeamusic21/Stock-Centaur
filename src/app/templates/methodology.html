@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Methodology{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Methodology</h1>
+    <p class="muted">How the trend score is calculated.</p>
+  </div>
+</div>
+<div class="card prose">
+  <h2>Slopes</h2>
+  <p>For each stock we fit a straight line to the <em>log</em> of its daily adjusted closing price over a trailing
+    window (5 years, 1 year, 1 month). The slope is reported as the % change along that trend line over its
+    window, so a 1Y slope of <code>+20%</code> means the trend line rose 20% over the past year.
+    Log prices make slopes comparable between a $5 stock and a $500 stock, and a regression is less sensitive to a
+    single spike than a simple start-to-end return.</p>
+
+  <h2>Trend score</h2>
+  <p>Slopes over different windows aren't on the same scale (a 5-year move is naturally much larger than a
+    1-month one), so blending raw slopes would let one window dominate. Instead each slope is converted to a percentile rank across all stocks (0–100), and
+    the trend score is the weighted average of those percentiles:</p>
+  {% if weights %}
+  <ul>
+    <li>5-year slope: <strong>{{ (weights['5y'] * 100) | round | int }}%</strong></li>
+    <li>1-year slope: <strong>{{ (weights['1y'] * 100) | round | int }}%</strong></li>
+    <li>1-month slope: <strong>{{ (weights['1m'] * 100) | round | int }}%</strong></li>
+  </ul>
+  {% endif %}
+  <p>Stocks with less than five years of history are scored on the slopes they do have. A stock needs at least one
+    year of history to be ranked. Tickers with no recent prices, or with a single-day move of 5x or more (usually an
+    unadjusted split or bad data), are dropped. You can try your own weights with
+    <strong>Tune weights</strong> on the rankings page.</p>
+
+  <h2>Trend score vs. the prediction model</h2>
+  <p>The trend score is calculated from slopes only. There's no model behind it, and it describes past momentum
+    rather than predicting future prices. A score of 90 means a stock has been trending better than about 90% of
+    stocks, not that it will keep doing so.</p>
+  <p>The upcoming Portfolio Sandbox will use a separate tree-based model to forecast each stock's price 30 days out.
+    It reuses the same slope calculations as inputs, over more windows (1 year, 6 months, 3 months, 1 month, 2 weeks
+    and 3 days). Once it's built, its forecast can appear next to the trend score.</p>
+
+  <h2>Data</h2>
+  <p>Prices come from Yahoo Finance via <code>yfinance</code> and are refreshed by re-running the modeling
+    pipeline. Nothing here is investment advice.</p>
+</div>
+{% endblock %}

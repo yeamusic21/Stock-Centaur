@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Stock Centaur{% endblock %} · Stock Centaur</title>
+  <link rel="icon" href="{{ url_for('static', filename='img/logo.jpeg') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>
+    try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="{{ url_for('rankings') }}">
+        <img src="{{ url_for('static', filename='img/logo.jpeg') }}" alt="">
+        <span>Stock Centaur</span>
+      </a>
+      <nav class="nav">
+        <div class="nav-label">Explore</div>
+        <a href="{{ url_for('rankings') }}" class="{{ 'active' if active == 'rankings' }}">
+          <svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M14 7h7v7"/></svg>Trend Rankings
+        </a>
+        <a href="{{ url_for('sandbox') }}" class="{{ 'active' if active == 'sandbox' }}">
+          <svg viewBox="0 0 24 24"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>Portfolio Sandbox<span class="pill">Soon</span>
+        </a>
+        <a href="{{ url_for('insights') }}" class="{{ 'active' if active == 'insights' }}">
+          <svg viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 11l-5.5 2.5L12 19l-2.5-5.5L4 11l5.5-2.5z"/></svg>Stock Insights<span class="pill">Soon</span>
+        </a>
+        <div class="nav-label">About</div>
+        <a href="{{ url_for('methodology') }}" class="{{ 'active' if active == 'methodology' }}">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>Methodology
+        </a>
+      </nav>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+        <span>Toggle theme</span>
+      </button>
+    </aside>
+    <header class="topbar">
+      <button class="menu-btn" id="menu-btn" type="button" aria-label="Open menu">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <a class="brand" href="{{ url_for('rankings') }}">
+        <img src="{{ url_for('static', filename='img/logo.jpeg') }}" alt=""><span>Stock Centaur</span>
+      </a>
+    </header>
+    <div class="scrim" id="scrim"></div>
+    <main class="main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <script>
+    (() => {
+      const root = document.documentElement;
+      document.getElementById("theme-toggle").addEventListener("click", () => {
+        const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+        root.dataset.theme = dark ? "light" : "dark";
+        try { localStorage.setItem("theme", root.dataset.theme); } catch (e) {}
+      });
+      const toggleMenu = (open) => document.body.classList.toggle("menu-open", open);
+      document.getElementById("menu-btn").addEventListener("click", () => toggleMenu(true));
+      document.getElementById("scrim").addEventListener("click", () => toggleMenu(false));
+
+      // modals: [data-open="<dialog id>"] opens one; [data-close] or a click on the backdrop closes it
+      document.querySelectorAll("[data-open]").forEach((el) => {
+        el.addEventListener("click", () => document.getElementById(el.dataset.open).showModal());
+        el.addEventListener("keydown", (e) => {
+          if (el.tagName !== "BUTTON" && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); el.click(); }
+        });
+      });
+      document.querySelectorAll("dialog.modal").forEach((dialog) => {
+        dialog.addEventListener("click", (e) => { if (e.target === dialog || e.target.closest("[data-close]")) dialog.close(); });
+      });
+    })();
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
