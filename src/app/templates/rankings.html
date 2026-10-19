@@ -7,9 +7,22 @@
     <p class="muted">Stocks ranked by a blended trend score from their 5-year, 1-year and 1-month price slopes.
       <button class="link-btn" type="button" data-open="learn-more">Learn more</button></p>
   </div>
-  {% if meta %}
-  <div class="as-of">Data as of <strong>{{ meta.as_of }}</strong></div>
-  {% endif %}
+  <div class="head-actions">
+    {% if meta %}<div class="as-of">Data as of <strong>{{ meta.as_of }}</strong></div>{% endif %}
+    <button class="btn" id="refresh-btn" type="button">
+      <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.9-4M4 4v4h4M4 13a8 8 0 0 0 14.9 4M20 20v-4h-4"/></svg>
+      <span>Refresh data</span>
+    </button>
+  </div>
+</div>
+
+<div class="card refresh-status" id="refresh-status" hidden>
+  <div class="refresh-row">
+    <strong id="refresh-step">Refreshing…</strong>
+    <span class="muted" id="refresh-count"></span>
+  </div>
+  <div class="progress"><span id="refresh-bar"></span></div>
+  <div class="muted refresh-msg" id="refresh-msg"></div>
 </div>
 
 <dialog class="modal" id="learn-more" aria-labelledby="learn-more-title">
@@ -47,7 +60,8 @@
 {% if not meta %}
 <div class="card empty">
   <h2>No data yet</h2>
-  <p>Build the dataset from the repo root, then refresh this page:</p>
+  <p>Click <strong>Refresh data</strong> to download prices and build the rankings (about 15 minutes for every ticker).
+    Or run the pipeline from the repo root:</p>
   <pre><code>python src/modeling/data_gathering/01_pull_stock_data.py
 python src/modeling/02_build_trend_table.py</code></pre>
 </div>
@@ -129,4 +143,5 @@ python src/modeling/02_build_trend_table.py</code></pre>
 {% endblock %}
 {% block scripts %}
 {% if meta %}<script src="{{ url_for('static', filename='js/rankings.js') }}"></script>{% endif %}
+<script src="{{ url_for('static', filename='js/refresh.js') }}"></script>
 {% endblock %}

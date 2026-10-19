@@ -31,4 +31,4 @@ python src/modeling/02_build_trend_table.py
 python src/app/app.py
 ```
 
-Data is written to `data/` (git-ignored). See the Methodology page in the app for how the trend score is calculated.
+You can also rebuild the data from the app with the **Refresh data** button on the Trend Rankings page. Data is written to `data/` (git-ignored). See the Methodology page in the app for how the trend score is calculated.

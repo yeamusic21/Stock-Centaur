@@ -3,6 +3,8 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template
 
+import refresh
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TREND_TABLE_PATH = REPO_ROOT / "data" / "trend_table.json"
 
@@ -35,6 +37,17 @@ def api_stocks():
     if data is None:
         return jsonify({"error": "No trend data yet. Run the modeling pipeline first."}), 404
     return jsonify(data)
+
+
+@app.route("/api/refresh", methods=["GET"])
+def api_refresh_status():
+    return jsonify(refresh.status())
+
+
+@app.route("/api/refresh", methods=["POST"])
+def api_refresh_start():
+    started = refresh.start()
+    return jsonify(refresh.status()), 202 if started else 409
 
 
 @app.route("/sandbox")

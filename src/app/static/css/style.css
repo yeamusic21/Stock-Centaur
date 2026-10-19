@@ -125,6 +125,21 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .as-of { color: var(--muted); font-size: 13px; }
 .as-of strong { color: var(--text); font-weight: 600; }
 
+.head-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.btn svg { width: 16px; height: 16px; margin-right: 6px; }
+.btn.spinning svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.refresh-status { padding: 14px 18px; margin-bottom: 20px; }
+.refresh-row { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.refresh-msg { margin-top: 8px; font-size: 12px; font-family: "JetBrains Mono", ui-monospace, monospace; overflow-wrap: anywhere; }
+.refresh-status.error { border-color: var(--down); }
+.refresh-status.error strong { color: var(--down); }
+.progress { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.progress span { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--accent); transition: width .4s ease; }
+.progress.indeterminate span { width: 30%; animation: slide 1.2s ease-in-out infinite; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
