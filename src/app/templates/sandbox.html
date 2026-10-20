@@ -12,7 +12,7 @@
 
 <div class="notice" role="note">
   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>
-  <p><strong>Not investment advice.</strong> Projections are statistical estimates from past price trends only, for
+  <p><strong>Not investment advice.</strong> Projections are statistical estimates from past price trends and market data only, for
     exploring ideas. Real outcomes can fall well outside the ranges shown.</p>
 </div>
 
@@ -26,18 +26,21 @@
   <div class="modal-body prose">
     <h3>The model</h3>
     <p>A gradient-boosted tree model predicts each stock's return over the next 21 trading days (about 30 calendar
-      days). Its inputs come from the stock's own price history: slopes over the last 1 year, 6 months, 3 months,
-      1 month, 2 weeks and 3 days, plus its recent volatility, its worst drop over the past year and how far it sits
-      below its 52-week high. It's trained to predict how a stock does relative to the market, then the market's
-      long-run average return is added back. Two more tree models predict the 10th and 90th percentile to give each
-      stock a range, widened so that it held the actual outcome 80% of the time on held-out data.</p>
+      days). Its inputs are the stock's trend slopes over the last 1 year, 6 months, 3 months, 1 month, 2 weeks
+      and 3 days; its volatility, worst drop and distance from its 52-week high; its beta and stock-specific
+      volatility; its sector and how its industry has been trending; and the state of the market as a whole
+      (recent return, volatility and the VIX). It's trained to predict how a stock
+      does relative to the market, then the market's long-run average return is added back. Two more tree models
+      predict the 10th and 90th percentile of the stock's return to give it a range, which is wider when the
+      market is volatile and is widened so that it held the actual outcome 80% of the time on held-out data.</p>
     <h3>The portfolio range</h3>
     <p>The sandbox runs a Monte Carlo simulation: it draws 10,000 possible 30-day outcomes for every stock from its
       predicted return and range, correlated using how the stocks moved together over the past year, then adds up
       the portfolio's value in each one. The projected value is the median outcome.</p>
     {% if meta %}{% set v = meta.model.validation %}
     <h3>How well it did on held-out data</h3>
-    <p>Trained on earlier dates, then tested on {{ "{:,}".format(v.rows) }} stock-months from {{ v.start }} onward that it never saw:</p>
+    <p>Tested walk-forward: each 3-month block from {{ v.start }} onward was predicted by a model trained only on
+      earlier dates, {{ "{:,}".format(v.rows) }} stock-months in all:</p>
     <ul>
       <li>Average error {{ "%.2f" | format(v.mae_pct) }}% of price, vs {{ "%.2f" | format(v.baseline_mae_pct) }}% for assuming no change.</li>
       <li>Got the direction right {{ "%.1f" | format(v.direction_accuracy * 100) }}% of the time, vs

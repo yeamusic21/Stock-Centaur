@@ -1,4 +1,4 @@
-"""Run the data pipeline (pull prices, then rebuild the trend table) in a background thread."""
+"""Run the data pipeline (pull prices and company data, rebuild rankings, retrain and predict) in a background thread."""
 import re
 import subprocess
 import sys
@@ -11,6 +11,7 @@ MODELING_DIR = REPO_ROOT / "src" / "modeling"
 
 STEPS = [
     ("Downloading prices", [MODELING_DIR / "data_gathering" / "01_pull_stock_data.py", "--force"]),
+    ("Downloading company info", [MODELING_DIR / "data_gathering" / "01b_pull_company_data.py", "--skip-earnings"]),
     ("Building rankings", [MODELING_DIR / "02_build_trend_table.py"]),
     ("Training price model", [MODELING_DIR / "03_train_price_model.py"]),
     ("Predicting prices", [MODELING_DIR / "04_predict_prices.py"]),

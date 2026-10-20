@@ -30,3 +30,30 @@ def compute_risk(prices):
     out["max_dd_1y"] = (filled - filled.cummax()).min().where(enough)
     out["off_52w_high"] = (filled.iloc[-1] - year.max()).where(enough)
     return pd.DataFrame(out, index=prices.columns)
+
+
+BETA_FEATURES = ["beta_1y", "idio_vol_1y"]
+
+
+def compute_beta(prices, market):
+    """Beta and idiosyncratic volatility against `market` (daily market log returns) over the trailing year.
+
+    Beta is how much the stock moves per unit of market move; idiosyncratic volatility is the daily
+    standard deviation of what's left after removing that market part, i.e. stock-specific risk.
+    """
+    recent = prices.iloc[-(YEAR + 1):]
+    r = np.log(recent.where(recent > 0)).diff().iloc[1:].to_numpy()
+    m = market.reindex(recent.index[1:]).to_numpy()[:, None]
+    mask = ~np.isnan(r) & ~np.isnan(m)
+    n = mask.sum(axis=0)
+    r0, m0 = np.where(mask, r, 0.0), np.where(mask, m, 0.0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        mean_r, mean_m = r0.sum(axis=0) / n, m0.sum(axis=0) / n
+        cov = (r0 * m0).sum(axis=0) / n - mean_r * mean_m
+        var_m = (m0 * m0).sum(axis=0) / n - mean_m ** 2
+        var_r = (r0 * r0).sum(axis=0) / n - mean_r ** 2
+        beta = cov / var_m
+        idio = np.sqrt(np.maximum(var_r - beta * cov, 0))
+    enough = n >= MIN_COVERAGE * YEAR
+    return pd.DataFrame({"beta_1y": np.where(enough, beta, np.nan), "idio_vol_1y": np.where(enough, idio, np.nan)},
+                        index=prices.columns)

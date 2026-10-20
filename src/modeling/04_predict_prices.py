@@ -1,7 +1,8 @@
 """Predict every ranked stock's price ~30 days out with the trained price model.
 
-Reads data/prices.parquet, data/trend_table.json (for the list of ranked tickers) and
-data/price_model.joblib (from 03_train_price_model.py), and writes data/predictions.json with the
+Reads the input tables in data/ (prices, volumes, VIX, companies, earnings dates), data/trend_table.json
+(for the list of ranked tickers) and data/price_model.joblib (from 03_train_price_model.py), and
+writes data/predictions.json with the
 predicted price and a calibrated 10th-90th percentile range for each ticker. It also stores the log-return
 mean (mu) and spread (sigma) the Portfolio Sandbox uses for its Monte Carlo simulation.
 """
@@ -13,12 +14,10 @@ import numpy as np
 import pandas as pd
 from scipy.stats import norm
 
-from features.risk import compute_risk
-from features.trend import WINDOWS, compute_slopes
+from features import compute_features, load_inputs
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data"
-PRICES_PATH = DATA_DIR / "prices.parquet"
 TREND_TABLE_PATH = DATA_DIR / "trend_table.json"
 MODEL_PATH = DATA_DIR / "price_model.joblib"
 PREDICTIONS_PATH = DATA_DIR / "predictions.json"
@@ -26,18 +25,20 @@ PREDICTIONS_PATH = DATA_DIR / "predictions.json"
 HORIZON_CALENDAR_DAYS = 30
 
 
-def predict(prices, tickers, bundle):
+def predict(inputs, tickers, bundle):
     models, quantiles = bundle["models"], bundle["quantiles"]
-    windows = {f.removeprefix("slope_"): WINDOWS[f.removeprefix("slope_")]
-               for f in bundle["features"] if f.startswith("slope_")}
-    history = prices[tickers]
-    X = compute_slopes(history, windows).join(compute_risk(history))[bundle["features"]]
-    # the models predict the excess return over the market; add back the average market return
+    prices = inputs["prices"]
+    # market-wide and industry features need every stock, not just the ranked ones
+    X = compute_features(prices, inputs["volumes"], inputs["vix"], inputs["companies"], inputs["earnings"])
+    X = X.loc[tickers, bundle["features"]]
+    # the point model predicts the excess return over the market; add back the average market return
     drift, widen = bundle["market_drift"], bundle["range_adjustment"]
     mu = models["point"].predict(X) + drift
     # quantile models are fit separately and can cross; order them, widen by the conformal calibration
-    # from training, and keep the range around the point estimate
-    a, b = models["low"].predict(X) + drift, models["high"].predict(X) + drift
+    # from training, and keep the range around the point estimate. They predict either the raw return
+    # or (older models) the excess return, which needs the drift added back too
+    shift = drift if bundle.get("range_target_column", "excess") == "excess" else 0.0
+    a, b = models["low"].predict(X) + shift, models["high"].predict(X) + shift
     low = np.minimum(np.minimum(a, b) - widen, mu)
     high = np.maximum(np.maximum(a, b) + widen, mu)
     # spread of a normal distribution with the same low/high percentiles
@@ -57,13 +58,13 @@ def predict(prices, tickers, bundle):
 
 
 if __name__ == "__main__":
-    prices = pd.read_parquet(PRICES_PATH)
+    inputs = load_inputs(DATA_DIR)
     trend = json.loads(TREND_TABLE_PATH.read_text())
     bundle = joblib.load(MODEL_PATH)
     tickers = [s["ticker"] for s in trend["stocks"]]
 
-    table = predict(prices, tickers, bundle)
-    as_of = prices.index.max()
+    table = predict(inputs, tickers, bundle)
+    as_of = inputs["prices"].index.max()
     output = {
         "as_of": as_of.strftime("%Y-%m-%d"),
         "target_date": (as_of + pd.Timedelta(days=HORIZON_CALENDAR_DAYS)).strftime("%Y-%m-%d"),

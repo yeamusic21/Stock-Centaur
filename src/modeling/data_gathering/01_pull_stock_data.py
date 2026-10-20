@@ -1,7 +1,7 @@
-"""Pull 5 years of daily closing prices for every ticker in the ticker list.
+"""Pull 5 years of daily closing prices and volumes for every ticker in the ticker list.
 
-Results are saved as a wide parquet file (rows = dates, columns = tickers) at
-data/prices.parquet in the repo root.
+Results are saved as wide parquet files (rows = dates, columns = tickers) at data/prices.parquet
+and data/volumes.parquet in the repo root, plus the VIX index's daily close at data/vix.parquet.
 
 Usage:
     python 01_pull_stock_data.py              # pull all tickers (skips if data < 7 days old)
@@ -23,6 +23,8 @@ import yfinance as yf
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = REPO_ROOT / "data"
 PRICES_PATH = DATA_DIR / "prices.parquet"
+VOLUMES_PATH = DATA_DIR / "volumes.parquet"
+VIX_PATH = DATA_DIR / "vix.parquet"
 TICKERS_PATH = Path(__file__).resolve().parent / "full_stock_tickers_list_061817_6k.csv"
 
 MAX_DATA_AGE = timedelta(days=7)
@@ -40,7 +42,7 @@ def load_tickers(limit=None):
 
 
 def data_is_fresh():
-    if not PRICES_PATH.exists():
+    if not (PRICES_PATH.exists() and VOLUMES_PATH.exists() and VIX_PATH.exists()):
         return False
     modified = datetime.fromtimestamp(PRICES_PATH.stat().st_mtime)
     return datetime.now() - modified < MAX_DATA_AGE
@@ -60,9 +62,9 @@ class RateLimitCollector(logging.Handler):
 
 
 def download_closes(tickers):
-    """Download 5 years of adjusted closes for a batch of tickers.
+    """Download 5 years of adjusted closes and volumes for a batch of tickers.
 
-    Returns a wide DataFrame and the list of tickers that were rate limited (to retry later).
+    Returns wide close and volume DataFrames and the list of tickers that were rate limited (to retry later).
     """
     collector = RateLimitCollector()
     yf_logger = logging.getLogger("yfinance")
@@ -73,11 +75,12 @@ def download_closes(tickers):
         yf_logger.removeHandler(collector)
     rate_limited = [t for t in tickers if t in collector.tickers]
     if data.empty:
-        return pd.DataFrame(), rate_limited
-    closes = data["Close"]
+        return pd.DataFrame(), pd.DataFrame(), rate_limited
+    closes, volumes = data["Close"], data["Volume"]
     if isinstance(closes, pd.Series):  # single ticker
-        closes = closes.to_frame(tickers[0])
-    return closes.dropna(axis=1, how="all"), rate_limited
+        closes, volumes = closes.to_frame(tickers[0]), volumes.to_frame(tickers[0])
+    closes = closes.dropna(axis=1, how="all")
+    return closes, volumes[closes.columns], rate_limited
 
 
 def download_with_retry(tickers):
@@ -87,9 +90,9 @@ def download_with_retry(tickers):
         if wait:
             print(f"  rate limited on {len(tickers)} tickers, waiting {wait}s before retry {attempt}")
             time.sleep(wait)
-        closes, tickers = download_closes(tickers)
+        closes, volumes, tickers = download_closes(tickers)
         if not closes.empty:
-            frames.append(closes)
+            frames.append((closes, volumes))
         if not tickers:
             break
     else:
@@ -106,19 +109,38 @@ def pull_stock_data(tickers):
         time.sleep(CHUNK_PAUSE)
     if not frames:
         raise RuntimeError("No price data was downloaded.")
-    prices = pd.concat(frames, axis=1).sort_index()
-    prices = prices.loc[:, ~prices.columns.duplicated()]
-    prices.index = pd.to_datetime(prices.index).tz_localize(None)
-    prices.index.name = "Date"
-    if PRICES_PATH.exists():
-        # keep tickers from earlier pulls that failed this time (e.g. rate limited); new data wins
-        previous = pd.read_parquet(PRICES_PATH)
-        prices = prices.combine_first(previous)
-        prices = prices[prices.index >= prices.index.max() - pd.DateOffset(years=5)]
     DATA_DIR.mkdir(exist_ok=True)
-    prices.to_parquet(PRICES_PATH)
-    print(f"Saved {prices.shape[1]} tickers x {prices.shape[0]} days to {PRICES_PATH}")
+    prices = save_wide([c for c, _ in frames], PRICES_PATH)
+    save_wide([v for _, v in frames], VOLUMES_PATH)
+    print(f"Saved {prices.shape[1]} tickers x {prices.shape[0]} days to {PRICES_PATH} (volumes to {VOLUMES_PATH})")
+    pull_vix()
     return prices
+
+
+def save_wide(frames, path):
+    table = pd.concat(frames, axis=1).sort_index()
+    table = table.loc[:, ~table.columns.duplicated()]
+    table.index = pd.to_datetime(table.index).tz_localize(None)
+    table.index.name = "Date"
+    if path.exists():
+        # keep tickers from earlier pulls that failed this time (e.g. rate limited); new data wins
+        table = table.combine_first(pd.read_parquet(path))
+        table = table[table.index >= table.index.max() - pd.DateOffset(years=5)]
+    table.to_parquet(path)
+    return table
+
+
+def pull_vix():
+    """Daily close of the VIX volatility index, a market-wide input to the price model."""
+    data = yf.download("^VIX", period="5y", auto_adjust=True, progress=False)
+    if data.empty:
+        print("  could not download ^VIX, keeping the previous file")
+        return
+    vix = data["Close"].squeeze().rename("VIX").to_frame()
+    vix.index = pd.to_datetime(vix.index).tz_localize(None)
+    vix.index.name = "Date"
+    vix.to_parquet(VIX_PATH)
+    print(f"Saved VIX for {len(vix)} days to {VIX_PATH}")
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@
   - [x] Responsive and aesthetically pleasing table
   - [x] Stocks sorted by 'trend' varible (combo of 5yr, 1yr, & 1mon slope)
   - [x] Portfolio sandbox where users can select stocks and create a hypothetical portfolio with projected earnings
-    - Powered by a tree-based model that predicts each stock's price 30 days out from trend/slope features (1yr, 6mon, 3mon, 1mon, 2wk, 3day), used to run portfolio simulations
+    - Powered by a tree-based model that predicts each stock's price 30 days out from trend, risk, beta, industry-momentum and market-regime features, used to run portfolio simulations
   - [ ] Individual stock overview, similar to Yahoo Finance, but with a focus on ML & AI insights
     - LLM-powered research is an optional setting, enabled only when the user adds their own OpenAI API key
 
@@ -21,13 +21,16 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# 1. pull 5 years of daily prices for every ticker (~15 min; use --limit 200 for a quick test)
+# 1. pull 5 years of daily prices and volumes for every ticker (~15 min; use --limit 200 for a quick test)
 python src/modeling/data_gathering/01_pull_stock_data.py
+
+# 1b. pull sector, industry and earnings dates (~1.5 hours the first time, cached after that)
+python src/modeling/data_gathering/01b_pull_company_data.py
 
 # 2. compute slope features and the trend rankings
 python src/modeling/02_build_trend_table.py
 
-# 3. train the 30-day price model (~1 min; prints validation metrics vs a no-change baseline)
+# 3. train the 30-day price model (~10 min; prints walk-forward validation metrics vs a no-change baseline)
 python src/modeling/03_train_price_model.py
 
 # 4. predict each ranked stock's price 30 days out for the Portfolio Sandbox

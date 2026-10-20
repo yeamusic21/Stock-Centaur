@@ -37,13 +37,18 @@
     stocks, not that it will keep doing so.</p>
   <p>The <a href="{{ url_for('sandbox') }}">Portfolio Sandbox</a> uses a separate gradient-boosted tree model to
     forecast each stock's price 21 trading days (about 30 calendar days) out. It reuses the same slope calculations
-    as inputs, over more windows (1 year, 6 months, 3 months, 1 month, 2 weeks and 3 days), adds volatility and
-    drawdown measures, and is trained on hundreds of past dates per stock to predict how each stock does relative
-    to the market. Two quantile models give each forecast a 10th–90th percentile range, and the
-    sandbox combines those ranges in a Monte Carlo simulation to project a whole portfolio.</p>
-  <p>The model is checked on recent dates it never trained on. Short-term returns are mostly noise, so it only
-    narrowly beats simply assuming no change; the sandbox's <strong>How it works</strong> panel shows the latest
-    numbers.</p>
+    as inputs, over more windows (1 year, 6 months, 3 months, 1 month, 2 weeks and 3 days), and adds volatility,
+    drawdown, beta, sector and industry-momentum, and market-wide (VIX, recent market return) features. It's trained on hundreds of past dates per stock to predict
+    how each stock does relative to the market. Two quantile models give each forecast a 10th–90th percentile
+    range, and the sandbox combines those ranges in a Monte Carlo simulation to project a whole portfolio.</p>
+  <p>The model is checked walk-forward: each of the last four 3-month blocks is predicted by a model trained only
+    on dates before it, and a feature is kept only if it improves the ranking of stocks in most blocks (moving
+    averages, trading volume and earnings timing were tried and didn't).
+    Short-term returns are mostly noise, so it only narrowly beats simply assuming no change; the sandbox's
+    <strong>How it works</strong> panel shows the latest numbers.</p>
+  <p>Sector and industry come from Yahoo Finance's current classification. The ticker list dates from 2017
+    and companies that have since been delisted have no price history, so the model only ever learns from
+    survivors, which flatters its historical numbers somewhat.</p>
 
   <h2>Data</h2>
   <p>Prices come from Yahoo Finance via <code>yfinance</code> and are refreshed by re-running the modeling
