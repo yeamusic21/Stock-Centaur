@@ -5,3 +5,10 @@ yfinance
 pyarrow
 scikit-learn
 joblib
+scipy
+tinydb
+requests
+beautifulsoup4
+markdown
+robin_stocks
+pyetrade

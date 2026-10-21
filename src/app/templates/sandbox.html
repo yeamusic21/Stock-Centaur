@@ -80,10 +80,25 @@ python src/modeling/04_predict_prices.py</code></pre>
         </label>
         <ul class="combo-list" id="add-list" role="listbox" hidden></ul>
       </div>
+      <button class="btn" id="portfolios-btn" type="button" aria-expanded="false" aria-controls="portfolios">
+        <svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>Portfolios
+      </button>
       <button class="btn" id="autopick-btn" type="button" aria-expanded="false" aria-controls="autopick">
         <svg viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 11l-5.5 2.5L12 19l-2.5-5.5L4 11l5.5-2.5z"/></svg>Auto-pick
       </button>
       <button class="btn btn-quiet" id="clear-btn" type="button">Clear</button>
+    </div>
+    <div class="weights saved" id="portfolios" hidden>
+      <form class="save-row" id="save-form">
+        <label class="search save-title">
+          <input id="save-title" type="text" maxlength="80" placeholder="Portfolio title" aria-label="Portfolio title" required>
+        </label>
+        <button class="btn btn-primary" id="save-btn" type="submit">Save</button>
+        <button class="btn btn-quiet" id="save-new-btn" type="button" hidden>Save as new</button>
+      </form>
+      <p class="muted autopick-msg" id="save-msg" role="status">Saves the holdings below. Brokerage portfolios come from
+        <a href="{{ url_for('connections') }}">Connections</a>.</p>
+      <ul class="saved-list" id="saved-list"></ul>
     </div>
     <form class="weights autopick" id="autopick" hidden>
       <fieldset class="goal">

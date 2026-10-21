@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Research Agent{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Research Agent</h1>
+    <p class="muted">Pick a portfolio and the agent pulls fresh prices and news, runs the price model through 10,000
+      simulations, and has your local model write a review.
+      <button class="link-btn" type="button" data-open="about-agent">How it works</button></p>
+  </div>
+</div>
+
+<dialog class="modal" id="about-agent" aria-labelledby="about-agent-title">
+  <div class="modal-head">
+    <h2 id="about-agent-title">How the agent works</h2>
+    <button class="icon-btn" type="button" data-close aria-label="Close">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="modal-body prose">
+    <ol>
+      <li><strong>Score.</strong> Every holding gets the price model's 30-day forecast. Tickers outside the trend
+        rankings (ETFs, funds) are downloaded and scored on the spot.</li>
+      <li><strong>Pull prices.</strong> A fresh year of daily prices from Yahoo gives recent returns, moving averages,
+        volatility and drawdowns.</li>
+      <li><strong>Simulate.</strong> The same 10,000-run Monte Carlo as the Portfolio Sandbox gives the portfolio's
+        likely range and chance of a loss.</li>
+      <li><strong>Read the news.</strong> Headlines come from the free Yahoo Finance and Google News RSS feeds; the
+        largest holdings' top articles are scraped for their text.</li>
+      <li><strong>Write.</strong> Everything is handed to the model you picked in
+        <a href="{{ url_for('connections') }}">Connections</a>, running in LM Studio on this computer. Nothing is sent to
+        a paid service.</li>
+    </ol>
+    <p><strong>Detailed</strong> mode first writes a brief for each of the 8 largest holdings, then the review from those
+      briefs. It reads more carefully but makes up to 9 model calls instead of 1.</p>
+    <p class="muted">Reports are saved in <code>data/stock_centaur.json</code>. Nothing here is investment advice.</p>
+  </div>
+</dialog>
+
+{% if not has_predictions %}
+<div class="card empty">
+  <h2>No predictions yet</h2>
+  <p>The agent needs the price model's predictions. Refresh the data from the Trend Rankings page, or run the modeling pipeline.</p>
+</div>
+{% else %}
+<div class="agent-grid">
+  <div class="agent-side">
+    <form class="card agent-form" id="agent-form">
+      <h2>New report</h2>
+      <label class="stack-field">Portfolio
+        <select id="agent-portfolio" required><option value="">Loading…</option></select>
+      </label>
+      <label class="check"><input type="checkbox" id="agent-detailed"> Detailed <span class="muted">(a brief per holding; slower)</span></label>
+      <p class="muted agent-llm" id="agent-llm"></p>
+      <button class="btn btn-primary" id="agent-go" type="submit">Run agent</button>
+      <p class="muted agent-hint">No portfolios yet? Save one in the <a href="{{ url_for('sandbox') }}">Portfolio Sandbox</a> or pull one in <a href="{{ url_for('connections') }}">Connections</a>.</p>
+    </form>
+    <div class="card refresh-status" id="agent-job" hidden></div>
+    <section class="card">
+      <div class="list-head"><h2>Reports</h2></div>
+      <ul class="report-list" id="report-list"><li class="muted">Loading…</li></ul>
+    </section>
+  </div>
+  <article class="card report" id="report">
+    <div class="chart-empty muted">Run the agent or pick a saved report.</div>
+  </article>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if has_predictions %}
+<script src="{{ url_for('static', filename='js/report.js') }}"></script>
+<script src="{{ url_for('static', filename='js/agent.js') }}"></script>
+{% endif %}
+{% endblock %}

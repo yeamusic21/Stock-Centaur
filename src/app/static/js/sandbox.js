@@ -5,10 +5,15 @@
     holdings: [],    // [{ticker, mode: "dollars" | "shares", value}]
     sim: null,
     active: -1,      // highlighted search suggestion
+    loaded: null,    // saved portfolio the holdings came from: {id, title, source}
+    saved: [],       // saved portfolio list
   };
 
   const $ = (id) => document.getElementById(id);
   const STORAGE_KEY = "sandbox-holdings";
+  const LOADED_KEY = "sandbox-loaded";
+  const SOURCES = { sandbox: "Sandbox", robinhood: "Robinhood", etrade: "E*Trade" };
+  const TICKER_RE = /^[A-Z][A-Z0-9.\-]{0,9}$/;
   const DEFAULT_AMOUNT = 1000;
   const MAX_SUGGESTIONS = 8;
 
@@ -28,13 +33,28 @@
   };
 
   function save() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.holdings)); } catch (e) {}
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.holdings));
+      localStorage.setItem(LOADED_KEY, JSON.stringify(state.loaded));
+    } catch (e) {}
+  }
+
+  async function api(url, body, method = body ? "POST" : "GET") {
+    const res = await fetch(url, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
   }
 
   function restore() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
       state.holdings = saved.filter((h) => state.stocks[h.ticker] && (h.mode === "dollars" || h.mode === "shares"));
+      state.loaded = JSON.parse(localStorage.getItem(LOADED_KEY) || "null");
     } catch (e) { state.holdings = []; }
   }
 
@@ -229,9 +249,32 @@
         <span class="${tone(s.pred_return)}">${fmtPct(s.pred_return)}</span>
         ${held ? '<span class="pill">Added</span>' : ""}
       </li>`;
-    }).join("") : `<li class="combo-empty muted">No ranked ticker matches.</li>`;
+    }).join("") : TICKER_RE.test(input.value.trim().toUpperCase())
+      ? `<li role="option" id="opt-0" data-score="${escapeHtml(input.value.trim().toUpperCase())}" class="active combo-score">
+          <span>Score <strong class="ticker">${escapeHtml(input.value.trim().toUpperCase())}</strong> with the model</span>
+          <span class="muted">not ranked</span></li>`
+      : `<li class="combo-empty muted">No ranked ticker matches.</li>`;
     if (state.active >= 0) input.setAttribute("aria-activedescendant", `opt-${state.active}`);
     else input.removeAttribute("aria-activedescendant");
+  }
+
+  // tickers outside the rankings (ETFs, funds…) are downloaded and scored on the server first
+  async function scoreTicker(ticker) {
+    const input = $("add-search");
+    input.disabled = true;
+    input.value = `Scoring ${ticker}…`;
+    try {
+      const data = await api("/api/predictions/extra", { tickers: [ticker] });
+      Object.assign(state.stocks, data.stocks);
+      if (!state.stocks[ticker]) throw new Error(data.failed[ticker] || `Couldn't score ${ticker}.`);
+      input.value = "";
+      addTicker(ticker);
+    } catch (err) {
+      input.value = "";
+      alert(errorText(err));
+    } finally {
+      input.disabled = false;
+    }
   }
 
   function closeSuggestions() {
@@ -280,17 +323,20 @@
       } else if (e.key === "Enter") {
         e.preventDefault();
         const pick = items[Math.max(state.active, 0)];
+        const score = !items.length && $("add-list").querySelector("[data-score]");
         if (pick) { input.value = ""; closeSuggestions(); addTicker(pick); }
+        else if (score) { closeSuggestions(); scoreTicker(score.dataset.score); }
       } else if (e.key === "Escape") {
         closeSuggestions();
       }
     });
     $("add-list").addEventListener("pointerdown", (e) => {
-      const li = e.target.closest("li[data-ticker]");
+      const li = e.target.closest("li[data-ticker], li[data-score]");
       if (!li) return;
       e.preventDefault();  // keep focus off the input so the list closes cleanly
-      input.value = "";
       closeSuggestions();
+      if (li.dataset.score) { scoreTicker(li.dataset.score); return; }
+      input.value = "";
       addTicker(li.dataset.ticker);
     });
     document.addEventListener("pointerdown", (e) => { if (!e.target.closest("#combo")) closeSuggestions(); });
@@ -325,7 +371,91 @@
       apBtn.setAttribute("aria-expanded", String(!panel.hidden));
     });
     panel.addEventListener("submit", (e) => { e.preventDefault(); autopick(); });
-    $("clear-btn").addEventListener("click", () => { state.holdings = []; changed({ rows: true }); });
+    $("clear-btn").addEventListener("click", () => { state.holdings = []; state.loaded = null; changed({ rows: true }); renderSaved(); });
+
+    const savedPanel = $("portfolios"), savedBtn = $("portfolios-btn");
+    savedBtn.addEventListener("click", () => {
+      savedPanel.hidden = !savedPanel.hidden;
+      savedBtn.setAttribute("aria-expanded", String(!savedPanel.hidden));
+      if (!savedPanel.hidden) loadSaved();
+    });
+    $("save-form").addEventListener("submit", (e) => { e.preventDefault(); savePortfolio(false); });
+    $("save-new-btn").addEventListener("click", () => savePortfolio(true));
+    $("saved-list").addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-load], [data-delete]");
+      if (!btn) return;
+      if (btn.dataset.load) return loadPortfolio(+btn.dataset.load);
+      const p = state.saved.find((x) => x.id === +btn.dataset.delete);
+      if (!confirm(`Delete "${p.title}"?`)) return;
+      try {
+        state.saved = (await api(`/api/portfolios/${p.id}`, null, "DELETE")).portfolios;
+        if (state.loaded?.id === p.id) { state.loaded = null; save(); }
+        renderSaved();
+      } catch (err) { setSaveMsg(errorText(err), true); }
+    });
+  }
+
+  // ---------- saved portfolios ----------
+  const fmtWhen = (iso) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
+  function setSaveMsg(text, error = false) {
+    $("save-msg").textContent = text;
+    $("save-msg").classList.toggle("down", error);
+  }
+
+  function renderSaved() {
+    const loaded = state.loaded;
+    const editable = loaded?.source === "sandbox";
+    if (document.activeElement !== $("save-title")) $("save-title").value = loaded ? (editable ? loaded.title : `${loaded.title} (copy)`) : "";
+    $("save-btn").textContent = editable ? "Update" : "Save";
+    $("save-new-btn").hidden = !editable;
+    $("saved-list").innerHTML = state.saved.length ? state.saved.map((p) => `
+      <li class="${loaded?.id === p.id ? "current" : ""}">
+        <span class="pill pill-src ${p.source}">${SOURCES[p.source]}</span>
+        <span class="saved-title"><strong>${escapeHtml(p.title)}</strong>
+          <small class="muted">${p.count} holding${p.count === 1 ? "" : "s"} · ${p.source === "sandbox" ? "saved" : "pulled"} ${fmtWhen(p.updated_at)}</small></span>
+        <span class="saved-actions">
+          <button class="btn" type="button" data-load="${p.id}">${loaded?.id === p.id ? "Reload" : "Load"}</button>
+          <a class="btn btn-quiet" href="/agent?portfolio=${p.id}" title="Have the Research Agent review it">Review</a>
+          <button class="icon-btn" type="button" data-delete="${p.id}" aria-label="Delete ${escapeHtml(p.title)}">
+            <svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>
+        </span>
+      </li>`).join("") : `<li class="muted saved-empty">No saved portfolios yet.</li>`;
+  }
+
+  async function loadSaved() {
+    try {
+      state.saved = (await api("/api/portfolios")).portfolios;
+      renderSaved();
+    } catch (err) { setSaveMsg(errorText(err), true); }
+  }
+
+  async function savePortfolio(asNew) {
+    const holdings = state.holdings.filter((h) => +h.value > 0).map((h) => ({ ticker: h.ticker, mode: h.mode, value: +h.value }));
+    const title = $("save-title").value.trim();
+    const id = !asNew && state.loaded?.source === "sandbox" ? state.loaded.id : null;
+    try {
+      const data = await api("/api/portfolios", { title, holdings, id });
+      state.saved = data.portfolios;
+      state.loaded = { id: data.id, title, source: "sandbox" };
+      save();
+      setSaveMsg(`${id ? "Updated" : "Saved"} "${title}".`);
+      renderSaved();
+    } catch (err) { setSaveMsg(errorText(err), true); }
+  }
+
+  async function loadPortfolio(id) {
+    setSaveMsg("Loading… tickers outside the rankings are scored with the model first.");
+    try {
+      const p = await api(`/api/portfolios/${id}`);
+      Object.assign(state.stocks, p.predictions);
+      state.holdings = p.holdings.filter((h) => state.stocks[h.ticker]).map((h) => ({ ...h }));
+      state.loaded = { id: p.id, title: p.title, source: p.source };
+      changed({ rows: true });
+      const skipped = Object.keys(p.failed);
+      setSaveMsg(`Loaded "${p.title}".` + (skipped.length ? ` Skipped ${skipped.join(", ")}: no model forecast.` : ""));
+      renderSaved();
+    } catch (err) { setSaveMsg(errorText(err), true); }
   }
 
   async function init() {
@@ -341,6 +471,13 @@
     }
     restore();
     bind();
+    const wanted = new URLSearchParams(location.search).get("portfolio");
+    if (wanted) {
+      $("portfolios").hidden = false;
+      $("portfolios-btn").setAttribute("aria-expanded", "true");
+      history.replaceState(null, "", location.pathname);
+      loadSaved().then(() => loadPortfolio(+wanted));
+    }
     let resizeTimer = null;
     addEventListener("resize", () => {
       clearTimeout(resizeTimer);

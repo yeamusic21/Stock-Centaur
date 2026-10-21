@@ -1,7 +1,8 @@
 """Monte Carlo simulation of a hypothetical portfolio's value ~30 days out.
 
 Each stock's log return is drawn from a normal distribution with the mean (mu) and spread (sigma)
-from data/predictions.json. Stocks don't move independently, so the draws are correlated using the
+the price model predicted for it: data/predictions.json for the ranked stocks, plus
+data/extra_predictions.json for other tickers scored on demand (see on_demand.py). Stocks don't move independently, so the draws are correlated using the
 correlation of each pair's daily returns over the last year.
 """
 import json
@@ -13,7 +14,9 @@ from scipy.stats import norm
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PREDICTIONS_PATH = REPO_ROOT / "data" / "predictions.json"
+EXTRA_PATH = REPO_ROOT / "data" / "extra_predictions.json"
 PRICES_PATH = REPO_ROOT / "data" / "prices.parquet"
+EXTRA_PRICES_PATH = REPO_ROOT / "data" / "extra_prices.parquet"  # last year of on-demand tickers' prices
 
 SIMULATIONS = 10_000
 CORR_DAYS = 252
@@ -42,9 +45,30 @@ def load_predictions():
     return _load(PREDICTIONS_PATH, lambda p: json.loads(p.read_text()))
 
 
+def load_extra():
+    """Predictions made on demand for unranked tickers, dropped once the main predictions move to a newer date."""
+    base = load_predictions()
+    cache = _load(EXTRA_PATH, lambda p: json.loads(p.read_text()))
+    if base is None or cache is None or cache.get("as_of") != base["as_of"]:
+        return {"as_of": base and base["as_of"], "stocks": {}, "failed": {}}
+    return cache
+
+
+def predictions_by_ticker():
+    """Every prediction the simulation can use, ranked and on-demand, keyed by ticker."""
+    data = load_predictions()
+    return {**load_extra()["stocks"], **{s["ticker"]: s for s in data["stocks"]}}
+
+
 def _daily_returns():
     prices = _load(PRICES_PATH, pd.read_parquet)
-    return None if prices is None else np.log(prices.iloc[-CORR_DAYS - 1:]).diff().iloc[1:]
+    if prices is None:
+        return None
+    prices = prices.iloc[-CORR_DAYS - 1:]
+    extra = _load(EXTRA_PRICES_PATH, pd.read_parquet)
+    if extra is not None:
+        prices = pd.concat([prices, extra.reindex(prices.index).drop(columns=prices.columns, errors="ignore")], axis=1)
+    return np.log(prices).diff().iloc[1:]
 
 
 def correlation(tickers):
@@ -65,8 +89,7 @@ def correlation(tickers):
 
 def simulate(holdings):
     """holdings: list of {"ticker", "amount"} where amount is dollars invested today."""
-    data = load_predictions()
-    by_ticker = {s["ticker"]: s for s in data["stocks"]}
+    by_ticker = predictions_by_ticker()
     rows = [(h["ticker"], float(h["amount"])) for h in holdings if h["ticker"] in by_ticker and float(h["amount"]) > 0]
     if not rows:
         raise ValueError("Add at least one stock with an amount above $0.")

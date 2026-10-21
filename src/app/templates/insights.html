@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}{{ ticker ~ " · " if ticker }}Stock Insights{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Stock Insights</h1>
+    <p class="muted">A per-stock overview: price trend, the model's 30-day forecast, company profile, recent news and
+      on-demand AI research from your local model.</p>
+  </div>
+  <form class="search insight-search" id="insight-search" role="search">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <input id="insight-ticker" type="search" placeholder="Look up a ticker…" autocomplete="off" value="{{ ticker or '' }}"
+           aria-label="Ticker" spellcheck="false">
+  </form>
+</div>
+
+{% if not has_predictions %}
+<div class="card empty">
+  <h2>No predictions yet</h2>
+  <p>Stock Insights needs the price model's predictions. Refresh the data from the Trend Rankings page, or run the modeling pipeline.</p>
+</div>
+{% elif not ticker %}
+<div class="card empty">
+  <h2>Look up a stock</h2>
+  <p>Search for any ticker above, including ETFs and stocks outside the trend rankings, or open one from your
+    <a href="{{ url_for('rankings') }}">Trend Rankings</a>.</p>
+  <div class="quick-picks" id="quick-picks"></div>
+</div>
+{% else %}
+<div id="insight" data-ticker="{{ ticker }}">
+  <div class="card chart-empty muted" id="insight-loading">Pulling the latest data for {{ ticker }}…</div>
+  <div id="insight-body" hidden>
+    <div class="insight-title">
+      <div>
+        <h2 id="ins-name"></h2>
+        <p class="muted" id="ins-sub"></p>
+      </div>
+      <div class="insight-price">
+        <div class="stat-value" id="ins-price"></div>
+        <div id="ins-change"></div>
+      </div>
+    </div>
+
+    <section class="stats">
+      <div class="stat"><div class="stat-label">30-day forecast</div><div class="stat-value" id="ins-forecast">–</div></div>
+      <div class="stat"><div class="stat-label">Likely range (10th–90th)</div><div class="stat-value stat-range" id="ins-range">–</div></div>
+      <div class="stat"><div class="stat-label">Trend score</div><div class="stat-value" id="ins-trend">–</div></div>
+      <div class="stat"><div class="stat-label">1-year return</div><div class="stat-value" id="ins-1y">–</div></div>
+    </section>
+
+    <div class="insight-grid">
+      <section class="card chart-card">
+        <div class="chart-head">
+          <h2>Last year and the next 30 days</h2>
+          <span class="muted" id="ins-chart-note"></span>
+        </div>
+        <div class="chart" id="ins-chart"></div>
+        <div class="chart-key muted">
+          <span><i class="key-swatch"></i>Price</span>
+          <span><i class="key-band"></i>Model's 10th–90th percentile range</span>
+        </div>
+      </section>
+
+      <section class="card insight-facts">
+        <h2>Trend &amp; risk</h2>
+        <dl class="facts" id="ins-trend-facts"></dl>
+        <h2>Company</h2>
+        <dl class="facts" id="ins-profile"></dl>
+      </section>
+    </div>
+
+    <div class="insight-grid">
+      <section class="card ai-card">
+        <div class="list-head">
+          <h2>AI research</h2>
+          <button class="btn btn-primary" id="ins-research" type="button">
+            <svg viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 11l-5.5 2.5L12 19l-2.5-5.5L4 11l5.5-2.5z"/></svg>Run research
+          </button>
+        </div>
+        <p class="muted" id="ins-llm"></p>
+        <div class="refresh-status" id="ins-job" hidden></div>
+        <div class="report" id="ins-report"></div>
+        <div id="ins-older"></div>
+      </section>
+      <section class="card">
+        <div class="list-head"><h2>Recent news</h2></div>
+        <div class="news-wrap" id="ins-news"></div>
+      </section>
+    </div>
+    <p class="muted report-note">Not investment advice. Forecasts are statistical estimates from past prices and market data.</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if has_predictions %}
+<script src="{{ url_for('static', filename='js/report.js') }}"></script>
+<script src="{{ url_for('static', filename='js/insights.js') }}"></script>
+{% endif %}
+{% endblock %}

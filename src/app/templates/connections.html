@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Connections{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Connections</h1>
+    <p class="muted">Pull your brokerage holdings into saved portfolios and connect the local model the Research Agent uses.</p>
+  </div>
+</div>
+
+<div class="notice" role="note">
+  <svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+  <p><strong>Logins aren't saved.</strong> You sign in each time you pull new data. Your details go only to the
+    brokerage, the session is dropped once the holdings are saved, and only the holdings are stored, in
+    <code>data/stock_centaur.json</code> on this computer.</p>
+</div>
+
+<div class="conn-grid">
+  <!-- LM Studio -->
+  <section class="card conn" id="lm-card">
+    <div class="conn-head">
+      <div class="conn-logo lm">LM</div>
+      <div>
+        <h2>LM Studio</h2>
+        <p class="muted">Local language model for the Research Agent. Free and private.</p>
+      </div>
+      <span class="badge" id="lm-badge">Checking…</span>
+    </div>
+    <form class="conn-body" id="lm-form">
+      <label class="stack-field">Server URL
+        <input class="input" id="lm-url" type="url" required placeholder="http://localhost:1234/v1">
+      </label>
+      <label class="stack-field">Model
+        <select id="lm-model"><option value="">No models found</option></select>
+      </label>
+      <label class="stack-field">Start command
+        <input class="input mono" id="lm-command" type="text" placeholder="~/bin/lmstudio">
+        <small class="muted">Used by <strong>Launch</strong> when the server isn't running. In LM Studio, start the local server (Developer tab) so the app can reach it.</small>
+      </label>
+      <p class="conn-msg muted" id="lm-msg" role="status"></p>
+      <div class="conn-actions">
+        <button class="btn" id="lm-launch" type="button" hidden>Launch LM Studio</button>
+        <button class="btn btn-quiet" id="lm-test" type="button">Test</button>
+        <button class="btn btn-primary" type="submit">Save</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Robinhood -->
+  <section class="card conn" id="rh-card">
+    <div class="conn-head">
+      <div class="conn-logo rh">RH</div>
+      <div>
+        <h2>Robinhood</h2>
+        <p class="muted">Pulls your stock and ETF positions.</p>
+      </div>
+      <span class="badge" id="rh-badge"></span>
+    </div>
+    <form class="conn-body" id="rh-form" autocomplete="off">
+      <label class="stack-field">Username or email
+        <input class="input" id="rh-user" type="text" autocomplete="username" required>
+      </label>
+      <label class="stack-field">Password
+        <input class="input" id="rh-pass" type="password" autocomplete="current-password" required>
+      </label>
+      <label class="stack-field"><span>Authenticator code <span class="muted">(optional)</span></span>
+        <input class="input mono" id="rh-mfa" type="text" inputmode="numeric" maxlength="8" placeholder="123456">
+        <small class="muted">Only if you use an authenticator app. Otherwise Robinhood asks you to approve the sign-in in its app or sends you a code.</small>
+      </label>
+      <div class="conn-code" id="rh-code-row" hidden>
+        <label class="stack-field">Verification code from Robinhood
+          <input class="input mono" id="rh-code" type="text" inputmode="numeric" maxlength="10">
+        </label>
+        <button class="btn btn-primary" id="rh-code-btn" type="button">Send code</button>
+      </div>
+      <p class="conn-msg muted" id="rh-msg" role="status"></p>
+      <div class="conn-actions">
+        <span class="muted conn-last" id="rh-last"></span>
+        <button class="btn btn-primary" id="rh-go" type="submit">Sign in &amp; pull</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- E*Trade -->
+  <section class="card conn" id="et-card">
+    <div class="conn-head">
+      <div class="conn-logo et">E*</div>
+      <div>
+        <h2>E*Trade</h2>
+        <p class="muted">Pulls positions from every open account.</p>
+      </div>
+      <span class="badge" id="et-badge"></span>
+    </div>
+    <form class="conn-body" id="et-form" autocomplete="off">
+      <p class="conn-help muted">E*Trade's API doesn't take your password directly. You enter your username and password on
+        E*Trade's own sign-in page, using an API key from
+        <a href="https://developer.etrade.com/getting-started" target="_blank" rel="noopener">developer.etrade.com</a>.</p>
+      <label class="stack-field">Consumer key
+        <input class="input mono" id="et-key" type="text" required>
+      </label>
+      <label class="stack-field">Consumer secret
+        <input class="input mono" id="et-secret" type="password" required>
+      </label>
+      <label class="check"><input type="checkbox" id="et-sandbox"> Sandbox key (test data)</label>
+      <div class="conn-code" id="et-verify-row" hidden>
+        <ol class="conn-steps">
+          <li><a id="et-link" href="#" target="_blank" rel="noopener">Open E*Trade sign-in ↗</a> and sign in with your E*Trade username and password.</li>
+          <li>Accept, then paste the verification code E*Trade shows you.</li>
+        </ol>
+        <label class="stack-field">Verification code
+          <input class="input mono" id="et-verifier" type="text" maxlength="12">
+        </label>
+        <button class="btn btn-primary" id="et-verify-btn" type="button">Pull holdings</button>
+      </div>
+      <p class="conn-msg muted" id="et-msg" role="status"></p>
+      <div class="conn-actions">
+        <span class="muted conn-last" id="et-last"></span>
+        <button class="btn btn-primary" id="et-go" type="submit">Get sign-in link</button>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/connections.js') }}"></script>{% endblock %}
