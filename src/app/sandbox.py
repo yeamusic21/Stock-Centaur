@@ -4,6 +4,10 @@ Each stock's log return is drawn from a normal distribution with the mean (mu) a
 the price model predicted for it: data/predictions.json for the ranked stocks, plus
 data/extra_predictions.json for other tickers scored on demand (see on_demand.py). Stocks don't move independently, so the draws are correlated using the
 correlation of each pair's daily returns over the last year.
+
+The S&P 500 (SPY, scored like any on-demand ticker) is drawn in the same simulations with the same
+amount invested, so each outcome says whether the portfolio beat the index. A second comparison
+replays the last year: what the same mix would have done against SPY.
 """
 import json
 from pathlib import Path
@@ -17,6 +21,8 @@ PREDICTIONS_PATH = REPO_ROOT / "data" / "predictions.json"
 EXTRA_PATH = REPO_ROOT / "data" / "extra_predictions.json"
 PRICES_PATH = REPO_ROOT / "data" / "prices.parquet"
 EXTRA_PRICES_PATH = REPO_ROOT / "data" / "extra_prices.parquet"  # last year of on-demand tickers' prices
+SP500_PATH = REPO_ROOT / "data" / "sp500.parquet"
+BENCHMARK = "SPY"
 
 SIMULATIONS = 10_000
 CORR_DAYS = 252
@@ -60,15 +66,22 @@ def predictions_by_ticker():
     return {**load_extra()["stocks"], **{s["ticker"]: s for s in data["stocks"]}}
 
 
-def _daily_returns():
+def _recent_prices():
+    """The last year of closes for every ticker the sandbox knows: ranked, on-demand and the S&P 500."""
     prices = _load(PRICES_PATH, pd.read_parquet)
     if prices is None:
         return None
     prices = prices.iloc[-CORR_DAYS - 1:]
-    extra = _load(EXTRA_PRICES_PATH, pd.read_parquet)
-    if extra is not None:
-        prices = pd.concat([prices, extra.reindex(prices.index).drop(columns=prices.columns, errors="ignore")], axis=1)
-    return np.log(prices).diff().iloc[1:]
+    for path in (EXTRA_PRICES_PATH, SP500_PATH):
+        more = _load(path, pd.read_parquet)
+        if more is not None:
+            prices = pd.concat([prices, more.reindex(prices.index).drop(columns=prices.columns, errors="ignore")], axis=1)
+    return prices
+
+
+def _daily_returns():
+    prices = _recent_prices()
+    return None if prices is None else np.log(prices).diff().iloc[1:]
 
 
 def correlation(tickers):
@@ -96,15 +109,19 @@ def simulate(holdings):
 
     tickers = [t for t, _ in rows]
     amounts = np.array([a for _, a in rows])
-    mu = np.array([by_ticker[t]["mu"] for t in tickers])
-    sigma = np.array([by_ticker[t]["sigma"] for t in tickers])
+    invested = float(amounts.sum())
+    # the benchmark rides along as one more correlated draw, holding the whole amount
+    bench = by_ticker.get(BENCHMARK)
+    drawn = tickers + ([BENCHMARK] if bench else [])
+    mu = np.array([by_ticker[t]["mu"] for t in drawn])
+    sigma = np.array([by_ticker[t]["sigma"] for t in drawn])
 
-    chol = np.linalg.cholesky(correlation(tickers))
-    z = np.random.default_rng(0).standard_normal((SIMULATIONS, len(tickers))) @ chol.T
-    values = np.exp(mu + sigma * z) * amounts
+    chol = np.linalg.cholesky(correlation(drawn))
+    z = np.random.default_rng(0).standard_normal((SIMULATIONS, len(drawn))) @ chol.T
+    growth = np.exp(mu + sigma * z)
+    values = growth[:, :len(tickers)] * amounts
     totals = values.sum(axis=1)
 
-    invested = float(amounts.sum())
     counts, edges = np.histogram(totals, bins=HIST_BINS, range=tuple(np.percentile(totals, [0.5, 99.5])))
     return {
         "invested": invested,
@@ -118,7 +135,44 @@ def simulate(holdings):
              "low": float(np.percentile(v, 10)), "high": float(np.percentile(v, 90))}
             for t, a, v in zip(tickers, amounts, values.T)
         ],
+        "benchmark": _benchmark_outcome(growth[:, -1] * invested, totals) if bench else None,
+        "past_year": past_year(tickers, amounts),
     }
+
+
+def _benchmark_outcome(bench_totals, totals):
+    """The same amount in the S&P 500, across the same simulations as the portfolio."""
+    pct = np.percentile(bench_totals, [10, 50, 90])
+    return {"ticker": BENCHMARK, "name": "S&P 500", "expected": float(bench_totals.mean()),
+            "percentiles": {"10": float(pct[0]), "50": float(pct[1]), "90": float(pct[2])},
+            "prob_beat": float((totals > bench_totals).mean()),
+            "median_gap": float(np.median(totals - bench_totals))}
+
+
+def past_year(tickers, amounts):
+    """What the same dollar mix, bought and held, would have done over the last year next to the S&P 500.
+
+    Starts on the first day every holding has a price, so a ticker with a short history shortens the window.
+    """
+    prices = _recent_prices()
+    if prices is None or BENCHMARK not in prices.columns:
+        return None
+    missing = sorted({t for t in tickers if t not in prices.columns})
+    held = [(t, a) for t, a in zip(tickers, amounts) if t not in missing]
+    if not held:
+        return None
+    frame = prices[[t for t, _ in held] + [BENCHMARK]]
+    frame = frame.loc[frame.notna().all(axis=1).idxmax():].ffill()
+    if len(frame) < 2 or frame.iloc[0].isna().any():
+        return None
+    start = frame.iloc[0]
+    weights = np.array([a for _, a in held])
+    # each holding is the same ticker bought once at the start, so duplicates just add up
+    portfolio = (frame.iloc[:, :-1] / start.iloc[:-1]).to_numpy() @ weights
+    benchmark = frame[BENCHMARK] / start[BENCHMARK] * weights.sum()
+    return {"dates": frame.index.strftime("%Y-%m-%d").tolist(),
+            "portfolio": np.round(portfolio, 2).tolist(), "benchmark": benchmark.round(2).tolist(),
+            "invested": float(weights.sum()), "missing": missing}
 
 
 def _loss_chance(mu, cov, weights):

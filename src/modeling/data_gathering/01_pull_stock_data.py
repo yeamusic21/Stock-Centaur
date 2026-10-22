@@ -1,13 +1,15 @@
 """Pull 5 years of daily closing prices and volumes for every ticker in the ticker list.
 
 Results are saved as wide parquet files (rows = dates, columns = tickers) at data/prices.parquet
-and data/volumes.parquet in the repo root, plus the VIX index's daily close at data/vix.parquet.
+and data/volumes.parquet in the repo root, plus the VIX index's daily close at data/vix.parquet and the
+S&P 500's (via the SPY ETF) at data/sp500.parquet.
 
 Usage:
     python 01_pull_stock_data.py              # pull all tickers (skips if data < 7 days old)
     python 01_pull_stock_data.py --force      # pull even if data is fresh
     python 01_pull_stock_data.py --limit 200  # only pull the first 200 tickers (handy for testing)
     python 01_pull_stock_data.py --tickers AAPL MSFT NVDA
+    python 01_pull_stock_data.py --benchmark-only  # only refresh the S&P 500 benchmark
 """
 import argparse
 import ast
@@ -25,6 +27,8 @@ DATA_DIR = REPO_ROOT / "data"
 PRICES_PATH = DATA_DIR / "prices.parquet"
 VOLUMES_PATH = DATA_DIR / "volumes.parquet"
 VIX_PATH = DATA_DIR / "vix.parquet"
+SP500_PATH = DATA_DIR / "sp500.parquet"
+BENCHMARK = "SPY"  # tracks the S&P 500 and, auto-adjusted, includes dividends like the stock prices do
 TICKERS_PATH = Path(__file__).resolve().parent / "full_stock_tickers_list_061817_6k.csv"
 
 MAX_DATA_AGE = timedelta(days=7)
@@ -42,7 +46,8 @@ def load_tickers(limit=None):
 
 
 def data_is_fresh():
-    if not (PRICES_PATH.exists() and VOLUMES_PATH.exists() and VIX_PATH.exists()):
+    if not (PRICES_PATH.exists() and VOLUMES_PATH.exists() and VIX_PATH.exists()
+            and SP500_PATH.exists()):
         return False
     modified = datetime.fromtimestamp(PRICES_PATH.stat().st_mtime)
     return datetime.now() - modified < MAX_DATA_AGE
@@ -114,6 +119,7 @@ def pull_stock_data(tickers):
     save_wide([v for _, v in frames], VOLUMES_PATH)
     print(f"Saved {prices.shape[1]} tickers x {prices.shape[0]} days to {PRICES_PATH} (volumes to {VOLUMES_PATH})")
     pull_vix()
+    pull_benchmark()
     return prices
 
 
@@ -143,14 +149,30 @@ def pull_vix():
     print(f"Saved VIX for {len(vix)} days to {VIX_PATH}")
 
 
+def pull_benchmark():
+    """Daily adjusted close of SPY, the S&P 500 benchmark the rankings and sandbox compare against."""
+    data = yf.download(BENCHMARK, period="5y", auto_adjust=True, progress=False)
+    if data.empty:
+        print(f"  could not download {BENCHMARK}, keeping the previous file")
+        return
+    spy = data["Close"].squeeze().rename(BENCHMARK).to_frame()
+    spy.index = pd.to_datetime(spy.index).tz_localize(None)
+    spy.index.name = "Date"
+    spy.to_parquet(SP500_PATH)
+    print(f"Saved {BENCHMARK} (S&P 500) for {len(spy)} days to {SP500_PATH}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--force", action="store_true", help="pull even if existing data is fresh")
     parser.add_argument("--limit", type=int, help="only pull the first N tickers from the list")
     parser.add_argument("--tickers", nargs="+", help="pull these tickers instead of the ticker list")
+    parser.add_argument("--benchmark-only", action="store_true", help="only pull the S&P 500 benchmark (SPY)")
     args = parser.parse_args()
 
-    if data_is_fresh() and not (args.force or args.tickers or args.limit):
+    if args.benchmark_only:
+        pull_benchmark()
+    elif data_is_fresh() and not (args.force or args.tickers or args.limit):
         print(f"{PRICES_PATH} is less than {MAX_DATA_AGE.days} days old, skipping (use --force to re-pull).")
     else:
         pull_stock_data(args.tickers or load_tickers(args.limit))

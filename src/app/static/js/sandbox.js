@@ -111,10 +111,11 @@
     const invested = state.holdings.reduce((sum, h) => sum + dollars(h), 0);
     $("stat-invested").textContent = invested ? fmtMoney(invested) : "–";
     if (!sim) {
-      $("stat-projected").textContent = $("stat-range").textContent = $("stat-loss").textContent = "–";
+      $("stat-projected").textContent = $("stat-range").textContent = $("stat-loss").textContent = $("stat-beat").textContent = "–";
       $("chart").innerHTML = `<p class="muted chart-empty">Add stocks to see the range of outcomes.</p>`;
       $("chart-key").hidden = true;
       $("chart-note").textContent = "";
+      $("bench-card").hidden = true;
       return;
     }
     const median = sim.percentiles["50"];
@@ -124,7 +125,100 @@
     $("stat-loss").textContent = Math.round(sim.prob_loss * 100) + "%";
     $("chart-note").textContent = `${sim.simulations.toLocaleString()} simulations`;
     $("chart-key").hidden = false;
+    $("key-bench").hidden = !sim.benchmark;
     renderChart(sim);
+    renderBenchmark(sim);
+  }
+
+  // ---------- vs the S&P 500 ----------
+  function renderBenchmark(sim) {
+    const b = sim.benchmark;
+    $("stat-beat").textContent = b ? Math.round(b.prob_beat * 100) + "%" : "–";
+    $("bench-card").hidden = !b && !sim.past_year;
+    if (b) {
+      const row = (label, p, extra = "") => {
+        const change = (p["50"] / sim.invested - 1) * 100;
+        return `<tr${extra}><td>${label}</td><td class="num">${fmtMoney(p["50"])}</td><td class="num ${tone(change)}">${fmtPct(change)}</td>
+          <td class="num hide-sm">${fmtMoney(p["10"])} – ${fmtMoney(p["90"])}</td></tr>`;
+      };
+      $("bench-rows").innerHTML = row("This portfolio", sim.percentiles) + row("S&amp;P 500", b.percentiles, ' class="muted"');
+      const gap = b.median_gap;
+      $("bench-note").textContent = `The portfolio ends up ahead of the S&P 500 in ${Math.round(b.prob_beat * 100)}% of the ` +
+        `${sim.simulations.toLocaleString()} simulations, by ${fmtMoney(Math.abs(gap))} ${gap >= 0 ? "more" : "less"} in the typical one.`;
+    } else {
+      $("bench-rows").innerHTML = `<tr><td colspan="4" class="muted">No S&amp;P 500 forecast available.</td></tr>`;
+      $("bench-note").textContent = "";
+    }
+    renderPastYear(sim.past_year);
+  }
+
+  function renderPastYear(past) {
+    if (!past) {
+      $("past-chart").innerHTML = `<p class="muted chart-empty">No price history to compare yet.</p>`;
+      $("past-note").textContent = "";
+      return;
+    }
+    const { dates, portfolio, benchmark, invested } = past;
+    const pEnd = portfolio[portfolio.length - 1], bEnd = benchmark[benchmark.length - 1];
+    const pChg = (pEnd / invested - 1) * 100, bChg = (bEnd / invested - 1) * 100;
+    const since = new Date(dates[0] + "T00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    $("past-note").textContent = `(since ${since}` + (past.missing.length ? `, without ${past.missing.join(", ")}` : "") + ")";
+
+    const W = Math.max(280, $("past-chart").clientWidth), H = 220, padL = 8, padR = 64, padT = 12, padB = 26;
+    const all = [...portfolio, ...benchmark, invested];
+    const lo = Math.min(...all) * 0.98, hi = Math.max(...all) * 1.02;
+    const n = dates.length;
+    const x = (i) => padL + (i / (n - 1 || 1)) * (W - padL - padR);
+    const y = (v) => padT + (1 - (v - lo) / (hi - lo || 1)) * (H - padT - padB);
+    const line = (vals) => vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    const ticks = [];
+    for (let k = 0; k <= 3; k++) {
+      const i = Math.round(((n - 1) * k) / 3);
+      ticks.push(`<text x="${x(i)}" y="${H - 6}" text-anchor="${k === 0 ? "start" : "middle"}">${new Date(dates[i] + "T00:00").toLocaleDateString(undefined, { month: "short", year: "2-digit" })}</text>`);
+    }
+    // keep the two end labels from overlapping
+    let pY = y(pEnd) + 4, bY = y(bEnd) + 4;
+    if (Math.abs(pY - bY) < 14) { const mid = (pY + bY) / 2, up = pEnd >= bEnd ? -7 : 7; pY = mid + up; bY = mid - up; }
+
+    $("past-chart").innerHTML = `
+      <svg class="hist line-chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img"
+           aria-label="Over the last year this portfolio went ${fmtPct(pChg)} and the S&P 500 went ${fmtPct(bChg)}">
+        <line class="baseline" x1="${padL}" x2="${W - padR}" y1="${H - padB}" y2="${H - padB}"/>
+        <line class="today" x1="${padL}" x2="${W - padR}" y1="${y(invested)}" y2="${y(invested)}"/>
+        <polyline class="bench-line" points="${line(benchmark)}"/>
+        <polyline class="price-line" points="${line(portfolio)}"/>
+        <text class="end-label strong" x="${x(n - 1) + 6}" y="${pY}">${fmtPct(pChg)}</text>
+        <text class="end-label" x="${x(n - 1) + 6}" y="${bY}">${fmtPct(bChg)}</text>
+        <g class="axis">${ticks.join("")}</g>
+        <g class="hover-layer" hidden>
+          <line class="cross" y1="${padT}" y2="${H - padB}"/>
+          <circle class="dot bench" r="4"/><circle class="dot port" r="4"/>
+        </g>
+        <rect class="hit" x="${padL}" y="${padT}" width="${W - padL - padR}" height="${H - padT - padB}"/>
+      </svg>
+      <div class="chart-tip" hidden></div>`;
+
+    const svg = $("past-chart").querySelector("svg"), tip = $("past-chart").querySelector(".chart-tip");
+    const layer = svg.querySelector(".hover-layer");
+    const move = (e) => {
+      const box = svg.getBoundingClientRect();
+      const px = (e.clientX - box.left) * (W / box.width);
+      const i = Math.max(0, Math.min(n - 1, Math.round(((px - padL) / (W - padL - padR)) * (n - 1))));
+      layer.hidden = false;
+      layer.querySelector(".cross").setAttribute("x1", x(i));
+      layer.querySelector(".cross").setAttribute("x2", x(i));
+      for (const [cls, v] of [["port", portfolio[i]], ["bench", benchmark[i]]]) {
+        const dot = layer.querySelector(`.dot.${cls}`);
+        dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y(v));
+      }
+      const when = new Date(dates[i] + "T00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+      tip.innerHTML = `<strong>${when}</strong>Portfolio ${fmtMoney(portfolio[i])} (${fmtPct((portfolio[i] / invested - 1) * 100)})<br>` +
+        `S&amp;P 500 ${fmtMoney(benchmark[i])} (${fmtPct((benchmark[i] / invested - 1) * 100)})`;
+      tip.hidden = false;
+      tip.style.left = Math.min(Math.max(x(i) * (box.width / W), 110), box.width - 110) + "px";
+    };
+    svg.addEventListener("pointermove", move);
+    svg.addEventListener("pointerleave", () => { layer.hidden = true; tip.hidden = true; });
   }
 
   function renderChart(sim) {
@@ -158,13 +252,17 @@
     const invLine = inv >= lo && inv <= hi
       ? `<line class="invested" x1="${x(inv)}" x2="${x(inv)}" y1="${padT - 4}" y2="${H - padB}"/>`
       : "";
+    const spMid = sim.benchmark?.percentiles["50"];
+    const benchLine = spMid >= lo && spMid <= hi
+      ? `<line class="bench-median" x1="${x(spMid)}" x2="${x(spMid)}" y1="${padT - 4}" y2="${H - padB}"/>`
+      : "";
 
     $("chart").innerHTML = `
       <svg class="hist" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img"
            aria-label="Histogram of simulated portfolio values; median ${fmtMoney(sim.percentiles["50"])}, 10th to 90th percentile ${fmtMoney(p10)} to ${fmtMoney(p90)}">
         <rect class="band" x="${x(p10)}" y="${padT}" width="${Math.max(0, x(p90) - x(p10))}" height="${H - padT - padB}"/>
         <line class="baseline" x1="${padL}" x2="${W - padR}" y1="${H - padB}" y2="${H - padB}"/>
-        ${bars}${invLine}
+        ${bars}${invLine}${benchLine}
         <g class="axis">${axis}</g>
       </svg>
       <div class="chart-tip" id="chart-tip" hidden></div>`;
@@ -481,7 +579,7 @@
     let resizeTimer = null;
     addEventListener("resize", () => {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => { if (state.sim) renderChart(state.sim); }, 150);
+      resizeTimer = setTimeout(() => { if (state.sim) { renderChart(state.sim); renderPastYear(state.sim.past_year); } }, 150);
     });
     changed({ rows: true });
   }

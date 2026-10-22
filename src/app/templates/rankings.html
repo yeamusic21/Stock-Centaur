@@ -46,6 +46,10 @@
         1-year {{ (meta.weights['1y'] * 100) | round | int }}%, 1-month {{ (meta.weights['1m'] * 100) | round | int }}%{% endif %}</span>.
         You can change these with <strong>Tune weights</strong>.</li>
     </ol>
+    <h3>Compared with the S&amp;P 500</h3>
+    <p>The pinned <strong>SPY</strong> row is the S&amp;P 500 (through the SPY fund, dividends included), run through the
+      same slope calculations. Its trend score and rank show where the index would land if it were ranked with the
+      stocks, and the <strong>vs S&amp;P</strong> column is each stock's 1-year return minus the index's.</p>
     <h3>What it isn't</h3>
     <p>The trend score describes past momentum. It is not a prediction of where the price goes next. A score of 90
       means the stock has been trending better than about 90% of stocks, not that it will keep doing so.</p>
@@ -70,6 +74,7 @@ python src/modeling/02_build_trend_table.py</code></pre>
   <div class="stat"><div class="stat-label">Stocks ranked</div><div class="stat-value" id="stat-count">{{ "{:,}".format(meta.count) }}</div></div>
   <div class="stat"><div class="stat-label">Top trend</div><div class="stat-value" id="stat-top">–</div></div>
   <div class="stat"><div class="stat-label">Median 1Y return</div><div class="stat-value" id="stat-median">–</div></div>
+  <div class="stat"><div class="stat-label">Beat the S&amp;P 500 (1Y)</div><div class="stat-value" id="stat-beat">–</div></div>
   <div class="stat"><div class="stat-label">Up today</div><div class="stat-value" id="stat-up">–</div></div>
 </section>
 
@@ -119,6 +124,7 @@ python src/modeling/02_build_trend_table.py</code></pre>
           <th data-sort="price" class="num">Price</th>
           <th data-sort="change_1d" class="num">1D</th>
           <th data-sort="return_1y" class="num hide-sm">1Y return</th>
+          <th data-sort="vs_sp_1y" class="num hide-sm">vs S&amp;P <span class="tip tip-end" tabindex="0" aria-label="What is this?"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg><span class="tip-body" role="tooltip"><strong>vs the S&amp;P 500</strong>The stock's 1-year return minus the S&amp;P 500's (SPY, dividends included), in percentage points. Positive means it beat the index.</span></span></th>
           <th data-sort="slope_5y" class="num hide-md">5Y slope <span class="tip tip-end" tabindex="0" aria-label="What is this?"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg><span class="tip-body" role="tooltip"><strong>5-year slope</strong>% change along a straight-line fit to the log price over the last year. Less sensitive to one-day spikes than a simple return.</span></span></th>
           <th data-sort="slope_1y" class="num hide-md">1Y slope <span class="tip tip-end" tabindex="0" aria-label="What is this?"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg><span class="tip-body" role="tooltip"><strong>1-year slope</strong>% change along a straight-line fit to the log price over the last year. Less sensitive to one-day spikes than a simple return.</span></span></th>
           <th data-sort="slope_1m" class="num hide-md">1M slope <span class="tip tip-end" tabindex="0" aria-label="What is this?"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg><span class="tip-body" role="tooltip"><strong>1-month slope</strong>% change along a straight-line fit to the log price over the last month. Less sensitive to one-day spikes than a simple return.</span></span></th>
@@ -126,7 +132,7 @@ python src/modeling/02_build_trend_table.py</code></pre>
         </tr>
       </thead>
       <tbody id="stock-rows">
-        <tr><td colspan="10" class="loading">Loading stocks…</td></tr>
+        <tr><td colspan="11" class="loading">Loading stocks…</td></tr>
       </tbody>
     </table>
   </div>

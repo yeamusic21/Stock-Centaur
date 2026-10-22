@@ -92,6 +92,8 @@ def api_predictions_extra():
 def api_simulate():
     if sandbox_sim.load_predictions() is None:
         return jsonify({"error": "No predictions yet. Run the modeling pipeline first."}), 404
+    # the S&P 500 isn't a ranked stock; score it on demand (cached after the first time) to compare against
+    on_demand.predict_missing([sandbox_sim.BENCHMARK])
     try:
         return jsonify(sandbox_sim.simulate((request.get_json(silent=True) or {}).get("holdings", [])))
     except (ValueError, TypeError, KeyError) as err:
